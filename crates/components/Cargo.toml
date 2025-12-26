@@ -1,5 +1,5 @@
 [package]
-name = "rust-ui-components"
+name = "components"
 version = "0.1.0"
 edition = "2024"
 description = "UI component library for rust-ui framework"
