@@ -317,12 +317,17 @@ pub fn CreatePage(props: CreatePageProps) -> Element {
             format!("{}. {}", material_title, text)
         };
         
-        spawn(async move {
-            let _ = tokio::task::spawn_blocking(move || {
-                let _ = crate::core::stop_tts();
-                crate::core::speak_text(&full_text)
-            }).await;
-            is_playing.set(false);
+        // Limit text length for TTS
+        let text_to_speak = if full_text.len() > 5000 {
+            full_text.chars().take(5000).collect::<String>()
+        } else {
+            full_text
+        };
+        
+        // Use std::thread directly - avoids tokio/dioxus threading issues
+        std::thread::spawn(move || {
+            let _ = crate::core::stop_tts();
+            let _ = crate::core::speak_text(&text_to_speak);
         });
     };
     
