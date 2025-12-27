@@ -1,0 +1,25 @@
+[package]
+name = "audiolearn"
+version = "0.1.0"
+edition = "2024"
+description = "Audio-first online course platform - Learn on the go"
+
+[dependencies]
+dioxus = { version = "0.6", features = ["web", "desktop"] }
+components = { path = "../components" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+rodio = { version = "0.19", features = ["mp3", "wav"] }
+tokio = { version = "1.0", features = ["sync", "time", "rt-multi-thread"] }
+
+# Text-to-Speech engines
+tts = "0.26"                              # Cross-platform native TTS (Windows SAPI, macOS, Linux)
+msedge-tts = "0.2"                        # Microsoft Edge neural voices (high quality)
+thiserror = "1.0"                         # Error handling
+rfd = "0.15"                              # Rust File Dialog for document upload
+
+[features]
+default = ["web"]
+web = []
+desktop = []

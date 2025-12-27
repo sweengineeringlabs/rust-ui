@@ -8,3 +8,4 @@ repository = "https://github.com/sweengineeringlabs/rust-ui"
 
 [dependencies]
 dioxus = { version = "0.6", features = ["web", "desktop"] }
+uuid = { version = "1.11", features = ["v4"] }

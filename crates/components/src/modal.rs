@@ -10,7 +10,7 @@ pub struct ModalProps {
     children: Element,
 
     /// Open state
-    pub open: Signal<bool>,
+    pub open: bool,
 
     /// Modal title
     #[props(default)]
@@ -20,65 +20,17 @@ pub struct ModalProps {
     #[props(default)]
     pub size: Size,
 
-    /// Close on backdrop click
-    #[props(default = true)]
-    pub close_on_backdrop: bool,
-
-    /// Close on escape key
-    #[props(default = true)]
-    pub close_on_escape: bool,
-
-    /// Show close button
-    #[props(default = true)]
-    pub show_close: bool,
-
     /// Close handler
     #[props(default)]
-    pub onclose: Option<EventHandler<()>>,
+    pub on_close: Option<EventHandler<()>>,
 }
 
 /// Modal component
-///
-/// # Example
-/// ```rust
-/// let show_modal = use_signal(|| false);
-///
-/// rsx! {
-///     Button { onclick: move |_| show_modal.set(true), "Open Modal" }
-///
-///     Modal {
-///         open: show_modal,
-///         title: "Confirm Action",
-///
-///         p { "Are you sure?" }
-///
-///         ModalFooter {
-///             Button { onclick: move |_| show_modal.set(false), "Cancel" }
-///             Button { variant: Variant::Primary, "Confirm" }
-///         }
-///     }
-/// }
-/// ```
 #[component]
 pub fn Modal(props: ModalProps) -> Element {
-    let is_open = *props.open.read();
-
-    if !is_open {
+    if !props.open {
         return rsx! {};
     }
-
-    let close = move || {
-        props.open.set(false);
-        if let Some(handler) = &props.onclose {
-            handler.call(());
-        }
-    };
-
-    let backdrop_click = move |_| {
-        if props.close_on_backdrop {
-            close();
-        }
-    };
 
     let modal_size_class = match props.size {
         Size::Xs => "modal-xs",
@@ -91,29 +43,31 @@ pub fn Modal(props: ModalProps) -> Element {
     rsx! {
         div {
             class: "rust-ui-modal-backdrop",
-            onclick: backdrop_click,
+            onclick: move |_| {
+                if let Some(handler) = &props.on_close {
+                    handler.call(());
+                }
+            },
 
             div {
                 class: "rust-ui-modal {modal_size_class}",
                 onclick: move |evt| evt.stop_propagation(),
 
-                // Header
-                if props.title.is_some() || props.show_close {
+                if let Some(title) = &props.title {
                     div { class: "modal-header",
-                        if let Some(title) = &props.title {
-                            h2 { class: "modal-title", "{title}" }
-                        }
-                        if props.show_close {
-                            button {
-                                class: "modal-close",
-                                onclick: move |_| close(),
-                                "×"
-                            }
+                        h2 { class: "modal-title", "{title}" }
+                        button {
+                            class: "modal-close",
+                            onclick: move |_| {
+                                if let Some(handler) = &props.on_close {
+                                    handler.call(());
+                                }
+                            },
+                            "×"
                         }
                     }
                 }
 
-                // Body
                 div { class: "modal-body",
                     {props.children}
                 }

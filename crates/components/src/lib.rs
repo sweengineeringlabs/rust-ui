@@ -10,6 +10,14 @@ pub mod modal;
 pub mod badge;
 pub mod spinner;
 pub mod alert;
+pub mod table;
+pub mod tabs;
+pub mod toast;
+pub mod progress;
+pub mod avatar;
+pub mod tooltip;
+pub mod dropdown;
+pub mod icon;
 
 pub mod prelude {
     pub use crate::button::*;
@@ -20,6 +28,14 @@ pub mod prelude {
     pub use crate::badge::*;
     pub use crate::spinner::*;
     pub use crate::alert::*;
+    pub use crate::table::*;
+    pub use crate::tabs::*;
+    pub use crate::toast::*;
+    pub use crate::progress::*;
+    pub use crate::avatar::*;
+    pub use crate::tooltip::*;
+    pub use crate::dropdown::*;
+    pub use crate::icon::*;
 
     pub use crate::{Variant, Size};
 }

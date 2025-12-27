@@ -2,6 +2,8 @@
 resolver = "2"
 members = [
     "crates/components",
+    "crates/tutorial-app",
+    "crates/audiolearn",
 ]
 
 [workspace.package]

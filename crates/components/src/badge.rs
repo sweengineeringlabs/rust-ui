@@ -31,31 +31,21 @@ pub struct BadgeProps {
 }
 
 /// Badge component
-///
-/// # Example
-/// ```rust
-/// rsx! {
-///     Badge { "New" }
-///     Badge { variant: Variant::Success, "Active" }
-///     Badge { variant: Variant::Danger, pill: true, "3" }
-///     Badge { variant: Variant::Warning, outline: true, "Pending" }
-/// }
-/// ```
 #[component]
 pub fn Badge(props: BadgeProps) -> Element {
-    let class = format!(
-        "rust-ui-badge {} {} {} {}",
-        props.variant.class(),
-        props.size.class(),
-        if props.pill { "pill" } else { "" },
-        if props.outline { "outline" } else { "" },
-    );
-
     if props.dot {
+        let dot_class = format!("rust-ui-badge-dot {}", props.variant.class());
         rsx! {
-            span { class: "rust-ui-badge-dot {}", class: props.variant.class() }
+            span { class: "{dot_class}" }
         }
     } else {
+        let class = format!(
+            "rust-ui-badge {} {} {} {}",
+            props.variant.class(),
+            props.size.class(),
+            if props.pill { "pill" } else { "" },
+            if props.outline { "outline" } else { "" },
+        );
         rsx! {
             span { class: "{class}", {props.children} }
         }
@@ -75,9 +65,10 @@ pub struct StatusBadgeProps {
 
 #[component]
 pub fn StatusBadge(props: StatusBadgeProps) -> Element {
+    let dot_class = format!("status-dot {}", props.variant.class());
     rsx! {
         span { class: "rust-ui-status-badge",
-            span { class: "status-dot {}", class: props.variant.class() }
+            span { class: "{dot_class}" }
             span { class: "status-label", "{props.label}" }
         }
     }
