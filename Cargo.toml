@@ -4,6 +4,11 @@ members = [
     "crates/components",
     "crates/tutorial-app",
     "crates/audiolearn",
+    "crates/audiolearn/src-tauri",
+    "crates/rustml-core",
+    "crates/rustml-nn",
+    "crates/rustml-hub",
+    "crates/rustml-nlp",
 ]
 
 [workspace.package]

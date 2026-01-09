@@ -108,6 +108,8 @@ pub fn AudioLearnApp() -> Element {
                                                     lesson.title,
                                                     content
                                                 );
+                                                // Platform-specific TTS handling
+                                                #[cfg(feature = "desktop")]
                                                 spawn(async move {
                                                     let _ = tokio::task::spawn_blocking(move || {
                                                         // Stop any existing speech first
@@ -115,6 +117,11 @@ pub fn AudioLearnApp() -> Element {
                                                         speak_text(&lesson_text)
                                                     }).await;
                                                 });
+                                                #[cfg(feature = "web")]
+                                                {
+                                                    let _ = stop_tts();
+                                                    let _ = speak_text(&lesson_text);
+                                                }
                                             }
                                         }
                                     },
@@ -166,12 +173,18 @@ pub fn AudioLearnApp() -> Element {
                                     move |_| {
                                         is_playing.set(true);
                                         let text = format!("Resuming: {}", title);
+                                        #[cfg(feature = "desktop")]
                                         spawn(async move {
                                             let _ = tokio::task::spawn_blocking(move || {
                                                 let _ = crate::core::stop_tts();
                                                 crate::core::speak_text(&text)
                                             }).await;
                                         });
+                                        #[cfg(feature = "web")]
+                                        {
+                                            let _ = crate::core::stop_tts();
+                                            let _ = crate::core::speak_text(&text);
+                                        }
                                     }
                                 },
                                 on_pause: move |_| {

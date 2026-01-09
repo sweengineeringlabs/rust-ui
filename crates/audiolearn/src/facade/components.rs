@@ -291,7 +291,8 @@ pub fn ReadAloudButton(props: ReadAloudButtonProps) -> Element {
         let text = text.clone();
         status.set(TtsStatus::Loading);
         
-        // Spawn TTS task
+        // Platform-specific TTS task
+        #[cfg(feature = "desktop")]
         spawn(async move {
             status.set(TtsStatus::Speaking);
             
@@ -316,6 +317,16 @@ pub fn ReadAloudButton(props: ReadAloudButtonProps) -> Element {
                 }
             }
         });
+        #[cfg(feature = "web")]
+        {
+            status.set(TtsStatus::Speaking);
+            let _ = crate::core::stop_tts();
+            let result = crate::core::speak_text(&text);
+            if let Err(e) = result {
+                eprintln!("TTS Error: {}", e);
+            }
+            status.set(TtsStatus::Idle);
+        }
     };
     
     let icon = match *status.read() {
@@ -507,6 +518,7 @@ pub fn QuickTtsButton(props: QuickTtsButtonProps) -> Element {
         let text = text.clone();
         is_speaking.set(true);
         
+        #[cfg(feature = "desktop")]
         spawn(async move {
             let result = tokio::task::spawn_blocking(move || {
                 // Stop any existing speech first
@@ -519,6 +531,15 @@ pub fn QuickTtsButton(props: QuickTtsButtonProps) -> Element {
             }
             is_speaking.set(false);
         });
+        #[cfg(feature = "web")]
+        {
+            let _ = crate::core::stop_tts();
+            let result = crate::core::speak_text(&text);
+            if let Err(e) = result {
+                eprintln!("TTS error: {}", e);
+            }
+            is_speaking.set(false);
+        }
     };
     
     rsx! {
@@ -538,3 +559,497 @@ pub fn QuickTtsButton(props: QuickTtsButtonProps) -> Element {
     }
 }
 
+// =============================================================================
+// New Feature Components
+// =============================================================================
+
+use crate::common::{Bookmark, PlaybackSpeed};
+use crate::core::{SleepTimer, SearchResult, SearchEngine, LessonProgress};
+
+/// Full player view with all controls
+#[derive(Props, Clone, PartialEq)]
+pub struct FullPlayerProps {
+    pub title: String,
+    pub subtitle: String,
+    pub icon: String,
+    pub position: Seconds,
+    pub duration: Seconds,
+    pub is_playing: bool,
+    pub speed: PlaybackSpeed,
+    pub sleep_timer: SleepTimer,
+    pub bookmarks: Vec<Bookmark>,
+    pub on_play: EventHandler<()>,
+    pub on_pause: EventHandler<()>,
+    pub on_seek: EventHandler<Seconds>,
+    pub on_skip_back: EventHandler<()>,
+    pub on_skip_forward: EventHandler<()>,
+    pub on_speed_change: EventHandler<PlaybackSpeed>,
+    pub on_sleep_timer_change: EventHandler<SleepTimer>,
+    pub on_add_bookmark: EventHandler<()>,
+    pub on_close: EventHandler<()>,
+}
+
+#[component]
+pub fn FullPlayer(props: FullPlayerProps) -> Element {
+    let mut show_speed_picker = use_signal(|| false);
+    let mut show_sleep_picker = use_signal(|| false);
+    let mut show_bookmarks = use_signal(|| false);
+    
+    let progress = if props.duration > 0 {
+        (props.position as f32 / props.duration as f32) * 100.0
+    } else {
+        0.0
+    };
+    
+    let pos = Timestamp::new(props.position);
+    let dur = Timestamp::new(props.duration);
+    
+    rsx! {
+        div { class: "full-player",
+            // Header
+            header { class: "full-player-header",
+                button { 
+                    class: "close-btn",
+                    onclick: move |_| props.on_close.call(()),
+                    Icon { name: IconName::ChevronDown }
+                }
+                h2 { "Now Playing" }
+                button { 
+                    class: "more-btn",
+                    Icon { name: IconName::MoreVertical }
+                }
+            }
+            
+            // Album art / icon
+            div { class: "full-player-artwork",
+                div { class: "artwork-icon", "{props.icon}" }
+            }
+            
+            // Track info
+            div { class: "full-player-info",
+                h1 { "{props.title}" }
+                p { "{props.subtitle}" }
+            }
+            
+            // Progress bar with seek
+            div { class: "full-player-progress",
+                span { class: "time", "{pos.format()}" }
+                div { class: "progress-track",
+                    div { 
+                        class: "progress-fill",
+                        style: "width: {progress}%",
+                    }
+                }
+                span { class: "time", "{dur.format()}" }
+            }
+            
+            // Main controls
+            div { class: "full-player-controls",
+                button { 
+                    class: "control-btn secondary",
+                    onclick: move |_| props.on_skip_back.call(()),
+                    "-15s"
+                }
+                button { class: "control-btn secondary",
+                    Icon { name: IconName::SkipBack, size: Size::Lg }
+                }
+                button { 
+                    class: "control-btn primary",
+                    onclick: move |_| {
+                        if props.is_playing {
+                            props.on_pause.call(());
+                        } else {
+                            props.on_play.call(());
+                        }
+                    },
+                    if props.is_playing {
+                        Icon { name: IconName::Pause, size: Size::Xl }
+                    } else {
+                        Icon { name: IconName::Play, size: Size::Xl }
+                    }
+                }
+                button { class: "control-btn secondary",
+                    Icon { name: IconName::SkipForward, size: Size::Lg }
+                }
+                button { 
+                    class: "control-btn secondary",
+                    onclick: move |_| props.on_skip_forward.call(()),
+                    "+15s"
+                }
+            }
+            
+            // Secondary controls
+            div { class: "full-player-extras",
+                button { 
+                    class: "extra-btn",
+                    onclick: move |_| show_speed_picker.set(true),
+                    Icon { name: IconName::Sliders }
+                    span { "{props.speed.label()}" }
+                }
+                button { 
+                    class: "extra-btn",
+                    onclick: move |_| show_sleep_picker.set(true),
+                    Icon { name: IconName::Moon }
+                    span { "{props.sleep_timer.label()}" }
+                }
+                button { 
+                    class: "extra-btn",
+                    onclick: move |_| props.on_add_bookmark.call(()),
+                    Icon { name: IconName::Bookmark }
+                    span { "Bookmark" }
+                }
+                button { 
+                    class: "extra-btn",
+                    onclick: move |_| show_bookmarks.set(true),
+                    Icon { name: IconName::List }
+                    if !props.bookmarks.is_empty() {
+                        span { class: "badge", "{props.bookmarks.len()}" }
+                    }
+                }
+            }
+            
+            // Speed picker modal
+            if *show_speed_picker.read() {
+                PlaybackSpeedPicker {
+                    current: props.speed.clone(),
+                    on_select: move |speed| {
+                        props.on_speed_change.call(speed);
+                        show_speed_picker.set(false);
+                    },
+                    on_close: move |_| show_speed_picker.set(false),
+                }
+            }
+            
+            // Sleep timer picker modal
+            if *show_sleep_picker.read() {
+                SleepTimerPicker {
+                    current: props.sleep_timer.clone(),
+                    on_select: move |timer| {
+                        props.on_sleep_timer_change.call(timer);
+                        show_sleep_picker.set(false);
+                    },
+                    on_close: move |_| show_sleep_picker.set(false),
+                }
+            }
+        }
+    }
+}
+
+/// Playback speed picker
+#[derive(Props, Clone, PartialEq)]
+pub struct PlaybackSpeedPickerProps {
+    pub current: PlaybackSpeed,
+    pub on_select: EventHandler<PlaybackSpeed>,
+    pub on_close: EventHandler<()>,
+}
+
+#[component]
+pub fn PlaybackSpeedPicker(props: PlaybackSpeedPickerProps) -> Element {
+    let speeds = vec![
+        PlaybackSpeed::Half,
+        PlaybackSpeed::ThreeQuarter,
+        PlaybackSpeed::Normal,
+        PlaybackSpeed::OneQuarter,
+        PlaybackSpeed::OneHalf,
+        PlaybackSpeed::OneThreeQuarter,
+        PlaybackSpeed::Double,
+    ];
+    
+    rsx! {
+        div { 
+            class: "picker-overlay",
+            onclick: move |_| props.on_close.call(()),
+            
+            div { 
+                class: "picker-modal",
+                onclick: move |e| e.stop_propagation(),
+                
+                h3 { "Playback Speed" }
+                
+                div { class: "picker-options",
+                    for speed in speeds.iter() {
+                        button {
+                            class: if *speed == props.current { "option active" } else { "option" },
+                            onclick: {
+                                let s = speed.clone();
+                                move |_| props.on_select.call(s.clone())
+                            },
+                            span { class: "option-label", "{speed.label()}" }
+                            if *speed == props.current {
+                                Icon { name: IconName::Check }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Sleep timer picker
+#[derive(Props, Clone, PartialEq)]
+pub struct SleepTimerPickerProps {
+    pub current: SleepTimer,
+    pub on_select: EventHandler<SleepTimer>,
+    pub on_close: EventHandler<()>,
+}
+
+#[component]
+pub fn SleepTimerPicker(props: SleepTimerPickerProps) -> Element {
+    let timers = SleepTimer::all();
+    
+    rsx! {
+        div { 
+            class: "picker-overlay",
+            onclick: move |_| props.on_close.call(()),
+            
+            div { 
+                class: "picker-modal",
+                onclick: move |e| e.stop_propagation(),
+                
+                h3 { 
+                    Icon { name: IconName::Moon }
+                    "Sleep Timer"
+                }
+                
+                div { class: "picker-options",
+                    for timer in timers.iter() {
+                        button {
+                            class: if *timer == props.current { "option active" } else { "option" },
+                            onclick: {
+                                let t = timer.clone();
+                                move |_| props.on_select.call(t.clone())
+                            },
+                            span { class: "option-label", "{timer.label()}" }
+                            if *timer == props.current {
+                                Icon { name: IconName::Check }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Search modal
+#[derive(Props, Clone, PartialEq)]
+pub struct SearchModalProps {
+    pub courses: Vec<Course>,
+    pub on_course_select: EventHandler<String>,
+    pub on_lesson_select: EventHandler<(String, String)>, // (course_id, lesson_id)
+    pub on_close: EventHandler<()>,
+}
+
+#[component]
+pub fn SearchModal(props: SearchModalProps) -> Element {
+    let mut query = use_signal(|| String::new());
+    let search_engine = use_memo(move || {
+        SearchEngine::new(props.courses.clone())
+    });
+    
+    let results = use_memo(move || {
+        let q = query.read().clone();
+        if q.len() < 2 {
+            Vec::new()
+        } else {
+            search_engine.read().search(&q)
+        }
+    });
+    
+    rsx! {
+        div { 
+            class: "search-overlay",
+            onclick: move |_| props.on_close.call(()),
+            
+            div { 
+                class: "search-modal",
+                onclick: move |e| e.stop_propagation(),
+                
+                // Search input
+                div { class: "search-input-wrapper",
+                    Icon { name: IconName::Search }
+                    input {
+                        class: "search-input",
+                        r#type: "text",
+                        placeholder: "Search courses, lessons...",
+                        value: "{query}",
+                        oninput: move |e| query.set(e.value()),
+                        autofocus: true,
+                    }
+                    if !query.read().is_empty() {
+                        button { 
+                            class: "clear-btn",
+                            onclick: move |_| query.set(String::new()),
+                            Icon { name: IconName::X }
+                        }
+                    }
+                }
+                
+                // Results
+                div { class: "search-results",
+                    if results.read().is_empty() && query.read().len() >= 2 {
+                        div { class: "no-results",
+                            Icon { name: IconName::Search, size: Size::Xl }
+                            p { "No results found for \"{query.read()}\"" }
+                        }
+                    } else if results.read().is_empty() && query.read().len() < 2 {
+                        div { class: "search-hint",
+                            p { "Type at least 2 characters to search" }
+                        }
+                    } else {
+                        for result in results.read().iter() {
+                            match result {
+                                SearchResult::Course(course_result) => rsx! {
+                                    button {
+                                        class: "search-result course-result",
+                                        onclick: {
+                                            let id = course_result.course.id.clone();
+                                            move |_| {
+                                                props.on_course_select.call(id.clone());
+                                                props.on_close.call(());
+                                            }
+                                        },
+                                        span { class: "result-icon", "{course_result.course.icon}" }
+                                        div { class: "result-info",
+                                            span { class: "result-title", "{course_result.course.title}" }
+                                            span { class: "result-meta", 
+                                                "Course • {course_result.course.lesson_count()} lessons"
+                                            }
+                                        }
+                                    }
+                                },
+                                SearchResult::Lesson(lesson_result) => rsx! {
+                                    button {
+                                        class: "search-result lesson-result",
+                                        onclick: {
+                                            let cid = lesson_result.course_id.clone();
+                                            let lid = lesson_result.lesson.id.clone();
+                                            move |_| {
+                                                props.on_lesson_select.call((cid.clone(), lid.clone()));
+                                                props.on_close.call(());
+                                            }
+                                        },
+                                        Icon { name: IconName::Headphones }
+                                        div { class: "result-info",
+                                            span { class: "result-title", "{lesson_result.lesson.title}" }
+                                            span { class: "result-meta", 
+                                                "Lesson • {lesson_result.course_title}"
+                                            }
+                                        }
+                                    }
+                                },
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Bookmark list component
+#[derive(Props, Clone, PartialEq)]
+pub struct BookmarkListProps {
+    pub bookmarks: Vec<Bookmark>,
+    pub on_select: EventHandler<Bookmark>,
+    pub on_delete: EventHandler<String>,
+}
+
+#[component]
+pub fn BookmarkList(props: BookmarkListProps) -> Element {
+    if props.bookmarks.is_empty() {
+        return rsx! {
+            div { class: "bookmark-empty",
+                Icon { name: IconName::Bookmark, size: Size::Xl }
+                h3 { "No bookmarks yet" }
+                p { "Tap the bookmark button while listening to save your place" }
+            }
+        };
+    }
+    
+    rsx! {
+        div { class: "bookmark-list",
+            for bookmark in props.bookmarks.iter() {
+                div { 
+                    class: "bookmark-item",
+                    onclick: {
+                        let b = bookmark.clone();
+                        move |_| props.on_select.call(b.clone())
+                    },
+                    
+                    div { class: "bookmark-time",
+                        Icon { name: IconName::Bookmark }
+                        span { "{bookmark.timestamp.format()}" }
+                    }
+                    
+                    if let Some(note) = &bookmark.note {
+                        p { class: "bookmark-note", "{note}" }
+                    }
+                    
+                    {
+                        let date_str = bookmark.created_at.format("%b %d, %H:%M").to_string();
+                        rsx! { span { class: "bookmark-date", "{date_str}" } }
+                    }
+                    
+                    button {
+                        class: "bookmark-delete",
+                        onclick: {
+                            let id = bookmark.id.clone();
+                            move |e: Event<MouseData>| {
+                                e.stop_propagation();
+                                props.on_delete.call(id.clone());
+                            }
+                        },
+                        Icon { name: IconName::Trash, size: Size::Sm }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Continue learning card
+#[derive(Props, Clone, PartialEq)]
+pub struct ContinueLearningCardProps {
+    pub lesson_title: String,
+    pub course_title: String,
+    pub icon: String,
+    pub progress: LessonProgress,
+    pub on_click: EventHandler<()>,
+}
+
+#[component]
+pub fn ContinueLearningCard(props: ContinueLearningCardProps) -> Element {
+    let progress_pct = props.progress.percentage();
+    let remaining = props.progress.duration.saturating_sub(props.progress.position);
+    let remaining_str = Timestamp::new(remaining).format_long();
+    
+    rsx! {
+        div { 
+            class: "continue-card",
+            onclick: move |_| props.on_click.call(()),
+            
+            div { class: "continue-icon", "{props.icon}" }
+            
+            div { class: "continue-info",
+                span { class: "continue-lesson", "{props.lesson_title}" }
+                span { class: "continue-course", "{props.course_title}" }
+                
+                div { class: "continue-progress",
+                    div { class: "progress-bar",
+                        div { 
+                            class: "progress-fill",
+                            style: "width: {progress_pct}%",
+                        }
+                    }
+                    span { class: "remaining", "{remaining_str} left" }
+                }
+            }
+            
+            button { class: "continue-play",
+                Icon { name: IconName::Play, size: Size::Lg }
+            }
+        }
+    }
+}

@@ -1,9 +1,11 @@
 //! AudioLearn entry point
 
 use audiolearn::facade::AudioLearnApp;
-use dioxus::desktop::{Config, WindowBuilder};
 
+#[cfg(feature = "desktop")]
 fn main() {
+    use dioxus::desktop::{Config, WindowBuilder};
+    
     let config = Config::new()
         .with_window(
             WindowBuilder::new()
@@ -18,4 +20,9 @@ fn main() {
     dioxus::LaunchBuilder::desktop()
         .with_cfg(config)
         .launch(AudioLearnApp);
+}
+
+#[cfg(all(feature = "web", not(feature = "desktop")))]
+fn main() {
+    dioxus::launch(AudioLearnApp);
 }

@@ -130,6 +130,7 @@ pub fn CoursePage(props: CoursePageProps) -> Element {
                                         move |_| props.on_lesson_click.call(id.clone())
                                     },
                                     on_read_aloud: move |text: String| {
+                                        #[cfg(feature = "desktop")]
                                         spawn(async move {
                                             let t = text.clone();
                                             let _ = tokio::task::spawn_blocking(move || {
@@ -138,6 +139,11 @@ pub fn CoursePage(props: CoursePageProps) -> Element {
                                                 crate::core::speak_text(&t)
                                             }).await;
                                         });
+                                        #[cfg(feature = "web")]
+                                        {
+                                            let _ = crate::core::stop_tts();
+                                            let _ = crate::core::speak_text(&text);
+                                        }
                                     },
                                 }
                             }
@@ -248,48 +254,64 @@ pub fn CreatePage(props: CreatePageProps) -> Element {
     let word_count = content.read().split_whitespace().count();
     let estimated_minutes = (word_count as f32 / 150.0).ceil() as u32; // ~150 words/min
     
-    // File upload handler - use channel for cross-thread communication
-    let upload_file = move |_| {
-        spawn(async move {
-            // Create a oneshot channel
-            let (tx, rx) = tokio::sync::oneshot::channel::<Option<(String, String, String)>>();
+    // File upload handler - platform specific
+    #[cfg(feature = "desktop")]
+    let upload_file = {
+        let content = content.clone();
+        let uploaded_filename = uploaded_filename.clone();
+        let upload_error = upload_error.clone();
+        let title = title.clone();
+        
+        move |_| {
+            // Clone signals for the closure
+            let mut content = content.clone();
+            let mut uploaded_filename = uploaded_filename.clone();
+            let mut upload_error = upload_error.clone();
+            let mut title = title.clone();
             
-            // Spawn the file dialog in a separate thread
-            std::thread::spawn(move || {
-                let result = rfd::FileDialog::new()
-                    .add_filter("Text files", &["txt", "md", "text"])
-                    .add_filter("All files", &["*"])
-                    .set_title("Select Learning Material")
-                    .pick_file();
-                
-                let data = result.and_then(|path| {
-                    let filename = path.file_name()
-                        .map(|n| n.to_string_lossy().to_string())
-                        .unwrap_or_else(|| "Unknown file".to_string());
-                    
-                    let file_stem = path.file_stem()
-                        .map(|n| n.to_string_lossy().to_string())
-                        .unwrap_or_else(|| filename.clone());
-                    
-                    std::fs::read_to_string(&path).ok().map(|content| {
-                        (filename, content, file_stem)
-                    })
-                });
-                
-                let _ = tx.send(data);
-            });
+            // Open file dialog synchronously on main thread using pollster
+            // (rfd needs to run on a thread with a message loop on Windows)
+            let result = rfd::FileDialog::new()
+                .add_filter("Text files", &["txt", "md", "text"])
+                .add_filter("All files", &["*"])
+                .set_title("Select Learning Material")
+                .pick_file();
             
-            // Wait for result
-            if let Ok(Some((filename, file_content, file_stem))) = rx.await {
-                content.set(file_content);
-                uploaded_filename.set(Some(filename));
-                upload_error.set(None);
+            if let Some(path) = result {
+                let filename = path.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "Unknown file".to_string());
                 
-                if title.read().is_empty() {
-                    title.set(file_stem);
+                let file_stem = path.file_stem()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| filename.clone());
+                
+                match std::fs::read_to_string(&path) {
+                    Ok(file_content) => {
+                        content.set(file_content);
+                        uploaded_filename.set(Some(filename));
+                        upload_error.set(None);
+                        
+                        if title.read().is_empty() {
+                            title.set(file_stem);
+                        }
+                    }
+                    Err(e) => {
+                        upload_error.set(Some(format!("Failed to read file: {}", e)));
+                    }
                 }
             }
-        });
+        }
+    };
+    
+    // Web version - file upload not supported yet
+    #[cfg(feature = "web")]
+    let upload_file = {
+        let upload_error = upload_error.clone();
+        move |_| {
+            let mut upload_error = upload_error.clone();
+            upload_error.set(Some("File upload is only available in the desktop app.".to_string()));
+        }
     };
     
     // Clear uploaded file and content
@@ -324,11 +346,17 @@ pub fn CreatePage(props: CreatePageProps) -> Element {
             full_text
         };
         
-        // Use std::thread directly - avoids tokio/dioxus threading issues
+        // Platform-specific TTS
+        #[cfg(feature = "desktop")]
         std::thread::spawn(move || {
             let _ = crate::core::stop_tts();
             let _ = crate::core::speak_text(&text_to_speak);
         });
+        #[cfg(feature = "web")]
+        {
+            let _ = crate::core::stop_tts();
+            let _ = crate::core::speak_text(&text_to_speak);
+        }
     };
     
     let stop_playback = move |_| {
@@ -367,6 +395,7 @@ pub fn CreatePage(props: CreatePageProps) -> Element {
         
         let full_text = format!("{}. {}", material.title, material.content);
         
+        #[cfg(feature = "desktop")]
         spawn(async move {
             let _ = tokio::task::spawn_blocking(move || {
                 let _ = crate::core::stop_tts();
@@ -374,6 +403,12 @@ pub fn CreatePage(props: CreatePageProps) -> Element {
             }).await;
             is_playing.set(false);
         });
+        #[cfg(feature = "web")]
+        {
+            let _ = crate::core::stop_tts();
+            let _ = crate::core::speak_text(&full_text);
+            is_playing.set(false);
+        }
     };
     
     rsx! {

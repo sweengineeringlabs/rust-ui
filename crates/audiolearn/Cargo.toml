@@ -10,16 +10,28 @@ components = { path = "../components" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
-rodio = { version = "0.19", features = ["mp3", "wav"] }
-tokio = { version = "1.0", features = ["sync", "time", "rt-multi-thread"] }
+thiserror = "1.0"
 
-# Text-to-Speech engines
-tts = "0.26"                              # Cross-platform native TTS (Windows SAPI, macOS, Linux)
-msedge-tts = "0.2"                        # Microsoft Edge neural voices (high quality)
-thiserror = "1.0"                         # Error handling
-rfd = "0.15"                              # Rust File Dialog for document upload
+# Desktop-only dependencies (native audio/TTS)
+rodio = { version = "0.19", features = ["mp3", "wav"], optional = true }
+tokio = { version = "1.0", features = ["sync", "time", "rt-multi-thread"], optional = true }
+tts = { version = "0.26", optional = true }
+msedge-tts = { version = "0.2", optional = true }
+rfd = { version = "0.15", optional = true }
+dirs = { version = "5.0", optional = true }
+
+# Web-specific dependencies  
+wasm-bindgen = { version = "0.2", optional = true }
+web-sys = { version = "0.3", optional = true, features = [
+    "Window",
+    "SpeechSynthesis", 
+    "SpeechSynthesisUtterance",
+    "SpeechSynthesisVoice"
+] }
 
 [features]
-default = ["web"]
-web = []
-desktop = []
+default = ["desktop"]
+web = ["wasm-bindgen", "web-sys"]
+desktop = ["rodio", "tokio", "tts", "msedge-tts", "rfd", "dirs"]
+tauri = ["web"]  # Tauri uses web frontend with native Tauri backend
+
