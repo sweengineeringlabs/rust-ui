@@ -6,10 +6,10 @@ use crate::api::traits::ConfigOps;
 pub(crate) static SOFTMAX_PAR_THRESHOLD: AtomicUsize = AtomicUsize::new(4096);
 
 /// Global threshold for switching batched_matmul from sequential to parallel (rayon).
-pub(crate) static BATCHED_MATMUL_PAR_THRESHOLD: AtomicUsize = AtomicUsize::new(4096);
+pub(crate) static BATCHED_MATMUL_PAR_THRESHOLD: AtomicUsize = AtomicUsize::new(128);
 
 /// Global threshold for switching F32 gemv (M=1) to custom parallel path.
-pub(crate) static GEMV_PAR_THRESHOLD: AtomicUsize = AtomicUsize::new(4096);
+pub(crate) static GEMV_PAR_THRESHOLD: AtomicUsize = AtomicUsize::new(512);
 
 /// Runtime configuration for parallelism and thread management.
 /// Must be applied (via `apply()`) before any computation to take effect.
@@ -30,8 +30,8 @@ impl Default for RuntimeConfig {
         Self {
             num_threads: 0,
             softmax_par_threshold: 4096,
-            batched_matmul_par_threshold: 4096,
-            gemv_par_threshold: 4096,
+            batched_matmul_par_threshold: 128,
+            gemv_par_threshold: 512,
         }
     }
 }

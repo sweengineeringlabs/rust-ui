@@ -20,6 +20,44 @@ use rayon::prelude::*;
 
 // ==================== SIMD-accelerated kernels ====================
 
+/// Dot product of two f32 slices using AVX2 with four independent accumulators.
+/// Reduces ILP stall on the FMA latency chain.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn dot_f32_avx2(a: &[f32], b: &[f32]) -> f32 {
+    use std::arch::x86_64::*;
+    let len = a.len().min(b.len());
+    let mut acc0 = _mm256_setzero_ps();
+    let mut acc1 = _mm256_setzero_ps();
+    let mut acc2 = _mm256_setzero_ps();
+    let mut acc3 = _mm256_setzero_ps();
+    let mut i = 0;
+    while i + 32 <= len {
+        acc0 = _mm256_add_ps(acc0, _mm256_mul_ps(_mm256_loadu_ps(a.as_ptr().add(i)),      _mm256_loadu_ps(b.as_ptr().add(i))));
+        acc1 = _mm256_add_ps(acc1, _mm256_mul_ps(_mm256_loadu_ps(a.as_ptr().add(i + 8)),  _mm256_loadu_ps(b.as_ptr().add(i + 8))));
+        acc2 = _mm256_add_ps(acc2, _mm256_mul_ps(_mm256_loadu_ps(a.as_ptr().add(i + 16)), _mm256_loadu_ps(b.as_ptr().add(i + 16))));
+        acc3 = _mm256_add_ps(acc3, _mm256_mul_ps(_mm256_loadu_ps(a.as_ptr().add(i + 24)), _mm256_loadu_ps(b.as_ptr().add(i + 24))));
+        i += 32;
+    }
+    while i + 8 <= len {
+        acc0 = _mm256_add_ps(acc0, _mm256_mul_ps(_mm256_loadu_ps(a.as_ptr().add(i)), _mm256_loadu_ps(b.as_ptr().add(i))));
+        i += 8;
+    }
+    let sum = _mm256_add_ps(_mm256_add_ps(acc0, acc1), _mm256_add_ps(acc2, acc3));
+    let hi  = _mm256_extractf128_ps(sum, 1);
+    let lo  = _mm256_castps256_ps128(sum);
+    let s128 = _mm_add_ps(lo, hi);
+    let shuf = _mm_movehdup_ps(s128);
+    let sums = _mm_add_ps(s128, shuf);
+    let shuf2 = _mm_movehl_ps(sums, sums);
+    let mut result = _mm_cvtss_f32(_mm_add_ss(sums, shuf2));
+    while i < len {
+        result += a[i] * b[i];
+        i += 1;
+    }
+    result
+}
+
 /// Process one row of RMSNorm using AVX2: sum of squares → normalize × gamma.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
@@ -827,6 +865,11 @@ impl Tensor {
             return Vec::new();
         }
 
+        #[cfg(target_arch = "x86_64")]
+        let use_avx2 = is_x86_feature_detected!("avx2") && k >= 8;
+        #[cfg(not(target_arch = "x86_64"))]
+        let use_avx2 = false;
+
         let mut output = vec![0.0f32; n];
         let chunk_size = (n / rayon::current_num_threads()).max(1);
         output.par_chunks_mut(chunk_size)
@@ -837,6 +880,11 @@ impl Tensor {
                     let n_idx = n_start + local_n;
                     let w_offset = n_idx * row_stride;
                     let w_row = &weight[w_offset..w_offset + k];
+                    #[cfg(target_arch = "x86_64")]
+                    if use_avx2 {
+                        *out_val = unsafe { dot_f32_avx2(input, w_row) };
+                        continue;
+                    }
                     let mut sum = 0.0f32;
                     for i in 0..k {
                         sum += input[i] * w_row[i];
