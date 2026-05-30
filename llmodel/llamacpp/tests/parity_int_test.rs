@@ -36,8 +36,8 @@
 
 use std::path::PathBuf;
 
-use swe_inference_backend_api::{Model, ModelBackend, ModelSource, ModelSpec};
-use swe_llmserver_llamacpp::load_llama_cpp_model;
+use swe_inference_backend_api::{Model, ModelBackend, ModelBackendLoader, ModelSource, ModelSpec};
+use swe_llmserver_llamacpp::LlamaCppBackendLoader;
 use swe_inference_generation::CompletionParams;
 use swe_llmmodel_model::OptProfile;
 
@@ -73,7 +73,7 @@ fn llama_cpp_backend_produces_nonempty_completions_for_parity_prompts() {
         id: None,
         path: Some(gguf.to_string_lossy().into_owned()),
     };
-    let model = load_llama_cpp_model(&spec, OptProfile::Optimized, "")
+    let model = LlamaCppBackendLoader.load(&spec, OptProfile::Optimized, "")
         .expect("llama.cpp should load the GGUF");
 
     let params = CompletionParams::new(0.0, MAX_TOKENS);
@@ -131,7 +131,7 @@ fn llama_cpp_backend_chat_completions_produce_nonempty_output() {
         path: Some(gguf.to_string_lossy().into_owned()),
     };
     let model =
-        load_llama_cpp_model(&spec, OptProfile::Optimized, "").expect("load GGUF");
+        LlamaCppBackendLoader.load(&spec, OptProfile::Optimized, "").expect("load GGUF");
 
     let params = CompletionParams::new(0.0, MAX_TOKENS);
     let mut completer = model.open_text_completer();
@@ -166,7 +166,7 @@ fn llama_cpp_tokenizer_roundtrip_preserves_text() {
         path: Some(gguf.to_string_lossy().into_owned()),
     };
     let model =
-        load_llama_cpp_model(&spec, OptProfile::Optimized, "").expect("load GGUF");
+        LlamaCppBackendLoader.load(&spec, OptProfile::Optimized, "").expect("load GGUF");
     let tok = model.tokenizer();
 
     for input in ["Hello, world!", "Testing 1-2-3.", "The quick brown fox."] {

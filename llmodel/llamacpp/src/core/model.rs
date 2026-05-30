@@ -462,7 +462,7 @@ fn argmax(logits: &[f32]) -> i32 {
 /// the concrete type never escapes this module, which keeps the
 /// self-referential pool's safety invariants intact (see module
 /// docs).
-pub fn load_llama_cpp_model(
+pub(crate) fn load_llama_cpp_model(
     spec: &ModelSpec,
     profile: OptProfile,
     _merged_toml: &str,
