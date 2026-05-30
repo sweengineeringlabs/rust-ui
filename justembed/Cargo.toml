@@ -33,15 +33,16 @@ env_logger = "0.11"
 swe-ml-tensor        = { path = "../main/features/tensor" }
 swe-cli              = { path = "../main/features/cli" }
 
-# llmmodel crates
-swe-llmmodel-model           = { path = "../llmodel/llmmodel/model" }
-swe-llmmodel-arch-nomic-bert = { path = "../llmodel/llmmodel/arch/nomic_bert" }
-swe-llmmodel-gguf            = { path = "../llmodel/llmmodel/gguf" }
-swe-llmmodel-tokenizer       = { path = "../llmodel/llmmodel/tokenizer" }
-swe-llmmodel-layers          = { path = "../llmodel/llmmodel/layers" }
+# llmmodel crates (now in sweengineeringlabs/llmodel)
+# TODO: publish to crates.io — tracked in https://github.com/sweengineeringlabs/llmodel/issues/4
+swe-llmmodel-model           = { git = "https://github.com/sweengineeringlabs/llmodel", rev = "1492f8d" }
+swe-llmmodel-arch-nomic-bert = { git = "https://github.com/sweengineeringlabs/llmodel", rev = "1492f8d" }
+swe-llmmodel-gguf            = { git = "https://github.com/sweengineeringlabs/llmodel", rev = "1492f8d" }
+swe-llmmodel-tokenizer       = { git = "https://github.com/sweengineeringlabs/llmodel", rev = "1492f8d" }
+swe-llmmodel-layers          = { git = "https://github.com/sweengineeringlabs/llmodel", rev = "1492f8d" }
 
-# Shared daemon infra (llmserve)
-swe-systemd = { path = "../llmserve/main/features/systemd" }
+# Shared daemon infra (now in sweengineeringlabs/llmodel)
+swe-systemd = { git = "https://github.com/sweengineeringlabs/llmodel", rev = "1492f8d" }
 
 # Internal
 swe-ml-embedding = { path = "conversion" }
