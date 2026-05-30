@@ -67,7 +67,8 @@ llama-cpp-2 = "0.1.143"
 swe-ml-tensor        = { git = "https://github.com/sweengineeringlabs/llmtensor", rev = "3f2fb98" }
 swe-ml-normalization = { path = "main/features/normalization" }
 swe-ml-activation    = { path = "main/features/activation" }
-swe-ml-embedding     = { path = "justembed/conversion" }
+# swe-ml-embedding extracted to https://github.com/sweengineeringlabs/justembed
+swe-ml-embedding     = { git = "https://github.com/sweengineeringlabs/justembed", rev = "469b0a5" }
 swe-cli              = { path = "main/features/cli" }
 swe-ml-architectures = { path = "main/features/architectures" }
 swe-ml-training      = { path = "main/features/training" }
