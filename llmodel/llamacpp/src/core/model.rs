@@ -205,6 +205,35 @@ impl LlamaCppModel {
         };
         Ok(PooledContext { owner: self, ctx: Some(ctx) })
     }
+
+    /// Pre-warm the context pool: allocate one context and run a single-token
+    /// decode pass so the first real request doesn't pay context-allocation +
+    /// JIT cost. The warmed context is returned to the pool on success.
+    pub(crate) fn warmup(&self) {
+        let start = std::time::Instant::now();
+        let mut owned = match self.build_context() {
+            Ok(c) => c,
+            Err(e) => {
+                log::warn!("llama_cpp warmup: context build failed: {}", e);
+                return;
+            }
+        };
+        let bos = self.model.token_bos();
+        let mut batch = LlamaBatch::new(1, 1);
+        if batch.add(bos, 0, &[0], true).is_err() {
+            log::warn!("llama_cpp warmup: batch.add failed");
+            return;
+        }
+        if let Err(e) = owned.inner.decode(&mut batch) {
+            log::warn!("llama_cpp warmup: decode failed: {}", e);
+            return;
+        }
+        owned.inner.clear_kv_cache();
+        if let Ok(mut pool) = self.context_pool.lock() {
+            pool.push_back(owned);
+        }
+        log::info!("llama_cpp warmup: {:.0}ms", start.elapsed().as_secs_f64() * 1000.0);
+    }
 }
 
 impl Model for LlamaCppModel {
@@ -493,6 +522,7 @@ pub fn load_llama_cpp_model(
     // Box immediately. The concrete type does not leak past this
     // point — callers get `Box<dyn Model>` and cannot reach the
     // struct to mem::swap it.
+    concrete.warmup();
     Ok(Box::new(concrete))
 }
 
