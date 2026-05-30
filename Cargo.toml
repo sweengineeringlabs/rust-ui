@@ -5,7 +5,7 @@ members = [
     # swe-ml-tensor extracted to https://github.com/sweengineeringlabs/llmtensor
     "main/features/normalization",
     "main/features/activation",
-    "main/features/cli",
+    # swe-cli extracted to https://github.com/sweengineeringlabs/swecli
     "main/features/architectures",
     "main/features/training",
     # Developer tools — build-time utilities, not runtime.
@@ -69,7 +69,7 @@ swe-ml-normalization = { path = "main/features/normalization" }
 swe-ml-activation    = { path = "main/features/activation" }
 # swe-ml-embedding extracted to https://github.com/sweengineeringlabs/justembed
 swe-ml-embedding     = { git = "https://github.com/sweengineeringlabs/justembed", rev = "469b0a5" }
-swe-cli              = { path = "main/features/cli" }
+swe-cli              = { git = "https://github.com/sweengineeringlabs/swecli", rev = "3204090" }
 swe-ml-architectures = { path = "main/features/architectures" }
 swe-ml-training      = { path = "main/features/training" }
 
