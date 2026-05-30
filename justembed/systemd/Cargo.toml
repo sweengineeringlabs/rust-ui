@@ -31,7 +31,7 @@ swe-cli.workspace = true
 thiserror.workspace = true
 
 # gRPC ingress — wire-level handler, status codes, TLS surface.
-swe-edge-ingress-grpc = { path = "../../../edge/ingress/grpc" }
+swe-edge-ingress-grpc = { package = "swe-edge-ingress-grpc-transport", path = "../../../edge/ingress/grpc/main/features/transport" }
 edge-domain           = { path = "../../../edge/domain" }
 
 # gRPC encoding + transport.  Kept in lockstep with edge's tonic 0.12.

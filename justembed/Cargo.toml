@@ -30,7 +30,7 @@ log = "0.4"
 env_logger = "0.11"
 
 # Cross-workspace foundations
-swe-ml-tensor        = { path = "../main/features/tensor" }
+swe-ml-tensor        = { git = "https://github.com/sweengineeringlabs/llmtensor", rev = "3f2fb98" }
 swe-cli              = { path = "../main/features/cli" }
 
 # llmmodel crates (now in sweengineeringlabs/llmodel)

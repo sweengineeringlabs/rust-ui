@@ -32,7 +32,7 @@ use anyhow::{Context, Result};
 use edge_domain::HandlerRegistry;
 use prost::Message;
 use swe_edge_ingress_grpc::{
-    GrpcHandlerAdapter, GrpcInboundError, GrpcHandlerRegistryDispatcher, HealthService,
+    GrpcHandlerAdapter, GrpcIngressError, GrpcHandlerRegistryDispatcher, HealthService,
     IngressTlsConfig, ServingStatus, TonicGrpcServer,
 };
 use tokio::net::TcpListener;
@@ -77,11 +77,11 @@ pub struct EmbedGrpcServer {
 
 /// Decode an [`EmbedRequest`] from raw protobuf bytes.
 ///
-/// Surfaces decode failures as [`GrpcInboundError::InvalidArgument`] so
+/// Surfaces decode failures as [`GrpcIngressError::InvalidArgument`] so
 /// the wire shows `tonic::Code::InvalidArgument` to the caller.
-fn decode_embed_request(bytes: &[u8]) -> Result<EmbedRequest, GrpcInboundError> {
+fn decode_embed_request(bytes: &[u8]) -> Result<EmbedRequest, GrpcIngressError> {
     EmbedRequest::decode(bytes).map_err(|e| {
-        GrpcInboundError::InvalidArgument(format!("decode EmbedRequest: {e}"))
+        GrpcIngressError::InvalidArgument(format!("decode EmbedRequest: {e}"))
     })
 }
 
@@ -159,8 +159,8 @@ pub async fn start_grpc_server(
 
     // Wire the router that fans out by method-path prefix.
     let router = Arc::new(MethodPathRouter::new(
-        dispatcher.clone() as Arc<dyn swe_edge_ingress_grpc::GrpcInbound>,
-        health.clone()     as Arc<dyn swe_edge_ingress_grpc::GrpcInbound>,
+        dispatcher.clone() as Arc<dyn swe_edge_ingress_grpc::GrpcIngress>,
+        health.clone()     as Arc<dyn swe_edge_ingress_grpc::GrpcIngress>,
     ));
 
     let bind = format!("{}:{}", cfg.host, cfg.port);
@@ -184,7 +184,7 @@ pub async fn start_grpc_server(
     // both the overall slot and the per-service slot.  Stops when the
     // shutdown signal fires.
     let refresh_health     = Arc::clone(&health);
-    let refresh_dispatcher = Arc::clone(&dispatcher) as Arc<dyn swe_edge_ingress_grpc::GrpcInbound>;
+    let refresh_dispatcher = Arc::clone(&dispatcher) as Arc<dyn swe_edge_ingress_grpc::GrpcIngress>;
     let (refresh_stop_tx, mut refresh_stop_rx) = oneshot::channel::<()>();
     let refresh_task = tokio::spawn(async move {
         let mut tick = tokio::time::interval(HEALTH_REFRESH_INTERVAL);
@@ -271,7 +271,7 @@ mod tests {
         let bad = vec![0xff, 0xff, 0xff, 0xff];
         let err = decode_embed_request(&bad).expect_err("must fail");
         match err {
-            GrpcInboundError::InvalidArgument(msg) => {
+            GrpcIngressError::InvalidArgument(msg) => {
                 assert!(
                     msg.contains("decode EmbedRequest"),
                     "error must explain what failed to decode: {msg}"

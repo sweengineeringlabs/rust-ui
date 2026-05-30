@@ -4,10 +4,8 @@
 //! Registered in [`edge_domain::HandlerRegistry`] under the fully-qualified
 //! gRPC method path so the gRPC ingress can look it up by URI path.
 
-use std::any::Any;
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use edge_domain::{Handler, HandlerError};
 
 use crate::api::proto::{EmbedRequest, EmbedResponse, FloatVector, EMBED_METHOD_PATH};
@@ -42,65 +40,60 @@ impl EmbedHandler {
     pub const ID: &'static str = EMBED_METHOD_PATH;
 }
 
-#[async_trait]
 impl Handler<EmbedRequest, EmbedResponse> for EmbedHandler {
     fn id(&self) -> &str { Self::ID }
     fn pattern(&self) -> &str { "Embed" }
 
-    async fn execute(&self, req: EmbedRequest) -> Result<EmbedResponse, HandlerError> {
-        // No-model mode: the daemon is reachable, the gRPC contract is
-        // honoured, but no embedding can be served. Surface as a typed
-        // FailedPrecondition (gRPC code 9 on the wire) with an
-        // operator-actionable message.
-        let state = match &self.state {
-            Some(s) => s,
-            None => {
-                return Err(HandlerError::FailedPrecondition(
-                    "no embedding model loaded; set [embedding.model].gguf_path \
-                     in your XDG overlay (Linux: $XDG_CONFIG_HOME/llminference/, \
-                     Windows: %APPDATA%\\llminference\\) and restart the daemon"
-                        .to_string(),
-                ));
-            }
-        };
+    fn execute(&self, req: EmbedRequest) -> futures::future::BoxFuture<'_, Result<EmbedResponse, HandlerError>> {
+        Box::pin(async move {
+            let state = match &self.state {
+                Some(s) => s,
+                None => {
+                    return Err(HandlerError::FailedPrecondition(
+                        "no embedding model loaded; set [embedding.model].gguf_path \
+                         in your XDG overlay (Linux: $XDG_CONFIG_HOME/llminference/, \
+                         Windows: %APPDATA%\\llminference\\) and restart the daemon"
+                            .to_string(),
+                    ));
+                }
+            };
 
-        let model_id = state.model_id.clone();
-        let state    = Arc::clone(state);
-        let inputs   = req.input;
+            let model_id = state.model_id.clone();
+            let state    = Arc::clone(state);
+            let inputs   = req.input;
 
-        let outcome = tokio::task::spawn_blocking(move || embed_inputs(state, inputs))
-            .await
-            .map_err(|e| HandlerError::ExecutionFailed(format!("task join: {e}")))?;
+            let outcome = tokio::task::spawn_blocking(move || embed_inputs(state, inputs))
+                .await
+                .map_err(|e| HandlerError::ExecutionFailed(format!("task join: {e}")))?;
 
-        let outcome = match outcome {
-            Ok(o)                              => o,
-            Err(EmbedError::EmptyInput)        => {
-                return Err(HandlerError::InvalidRequest("input must not be empty".into()));
-            }
-            Err(EmbedError::Tokenization(msg)) => {
-                return Err(HandlerError::InvalidRequest(format!("tokenization: {msg}")));
-            }
-            Err(other) => {
-                return Err(HandlerError::ExecutionFailed(other.to_string()));
-            }
-        };
+            let outcome = match outcome {
+                Ok(o)                              => o,
+                Err(EmbedError::EmptyInput)        => {
+                    return Err(HandlerError::InvalidRequest("input must not be empty".into()));
+                }
+                Err(EmbedError::Tokenization(msg)) => {
+                    return Err(HandlerError::InvalidRequest(format!("tokenization: {msg}")));
+                }
+                Err(other) => {
+                    return Err(HandlerError::ExecutionFailed(other.to_string()));
+                }
+            };
 
-        Ok(EmbedResponse {
-            model:      model_id,
-            embeddings: outcome
-                .vectors
-                .into_iter()
-                .map(|values| FloatVector { values })
-                .collect(),
+            Ok(EmbedResponse {
+                model:      model_id,
+                embeddings: outcome
+                    .vectors
+                    .into_iter()
+                    .map(|values| FloatVector { values })
+                    .collect(),
+            })
         })
     }
 
-    /// Health: serving when a model is loaded, not-serving in no-model
-    /// mode. The grpc_server's health-refresh task propagates this
-    /// into both the overall slot and the per-service slot.
-    async fn health_check(&self) -> bool { self.state.is_some() }
-
-    fn as_any(&self) -> &dyn Any { self }
+    fn health_check(&self) -> futures::future::BoxFuture<'_, bool> {
+        let is_some = self.state.is_some();
+        Box::pin(async move { is_some })
+    }
 }
 
 #[cfg(test)]

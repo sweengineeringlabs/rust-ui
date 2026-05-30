@@ -2,7 +2,7 @@
 resolver = "2"
 members = [
     # Foundations — consumed by llmserve workspace and any future workspaces.
-    "main/features/tensor",
+    # swe-ml-tensor extracted to https://github.com/sweengineeringlabs/llmtensor
     "main/features/normalization",
     "main/features/activation",
     "main/features/cli",
@@ -64,7 +64,7 @@ swe-readline = { path = "../swebash/swe-readline" }
 llama-cpp-2 = "0.1.143"
 
 # Foundation crates (in this workspace)
-swe-ml-tensor        = { path = "main/features/tensor" }
+swe-ml-tensor        = { git = "https://github.com/sweengineeringlabs/llmtensor", rev = "3f2fb98" }
 swe-ml-normalization = { path = "main/features/normalization" }
 swe-ml-activation    = { path = "main/features/activation" }
 swe-ml-embedding     = { path = "justembed/conversion" }

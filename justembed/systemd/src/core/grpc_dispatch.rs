@@ -1,6 +1,6 @@
 //! `MethodPathRouter` — routes inbound gRPC calls by method path prefix.
 //!
-//! The upstream `swe-edge-ingress-grpc` ships two `GrpcInbound` impls
+//! The upstream `swe-edge-ingress-grpc` ships two `GrpcIngress` impls
 //! that we want to use side-by-side:
 //!
 //! * [`GrpcHandlerRegistryDispatcher`] — dispatches user-defined RPCs by
@@ -8,7 +8,7 @@
 //! * [`HealthService`] — owns the standard `grpc.health.v1.Health` service
 //!   (`Check` + `Watch`).
 //!
-//! [`TonicGrpcServer`] takes a single `Arc<dyn GrpcInbound>`, so we need
+//! [`TonicGrpcServer`] takes a single `Arc<dyn GrpcIngress>`, so we need
 //! a tiny composite that fans out to the right one based on the request
 //! method path.  Anything under `/grpc.health.v1.Health/...` goes to
 //! `HealthService`; everything else goes to the user dispatcher.
@@ -28,9 +28,10 @@
 
 use std::sync::Arc;
 
+use edge_domain::RequestContext;
 use futures::future::BoxFuture;
 use swe_edge_ingress_grpc::{
-    GrpcHealthCheck, GrpcInbound, GrpcInboundResult, GrpcMessageStream, GrpcMetadata,
+    GrpcHealthCheck, GrpcIngress, GrpcIngressResult, GrpcMessageStream, GrpcMetadata,
     GrpcRequest, GrpcResponse,
 };
 
@@ -43,7 +44,7 @@ use swe_edge_ingress_grpc::{
 pub const HEALTH_SERVICE_PREFIX: &str = "/grpc.health.v1.Health/";
 
 /// `MethodPathRouter` — fans incoming calls out to one of two backing
-/// `GrpcInbound`s based on the request method path.
+/// `GrpcIngress`s based on the request method path.
 ///
 /// Calls whose method starts with [`HEALTH_SERVICE_PREFIX`] go to
 /// `health`; every other call goes to `default`.  This is the minimum
@@ -51,20 +52,20 @@ pub const HEALTH_SERVICE_PREFIX: &str = "/grpc.health.v1.Health/";
 /// `grpc.health.v1.Health` service through a single
 /// [`TonicGrpcServer`](swe_edge_ingress_grpc::TonicGrpcServer).
 pub struct MethodPathRouter {
-    default: Arc<dyn GrpcInbound>,
-    health:  Arc<dyn GrpcInbound>,
+    default: Arc<dyn GrpcIngress>,
+    health:  Arc<dyn GrpcIngress>,
 }
 
 impl MethodPathRouter {
     /// Build a router with `default` as the catch-all and `health` as
     /// the destination for any method under [`HEALTH_SERVICE_PREFIX`].
-    pub fn new(default: Arc<dyn GrpcInbound>, health: Arc<dyn GrpcInbound>) -> Self {
+    pub fn new(default: Arc<dyn GrpcIngress>, health: Arc<dyn GrpcIngress>) -> Self {
         Self { default, health }
     }
 
     /// Pick the inbound that owns `method` — `health` if the path is
     /// under [`HEALTH_SERVICE_PREFIX`], otherwise `default`.
-    fn pick(&self, method: &str) -> &Arc<dyn GrpcInbound> {
+    fn pick(&self, method: &str) -> &Arc<dyn GrpcIngress> {
         if method.starts_with(HEALTH_SERVICE_PREFIX) {
             &self.health
         } else {
@@ -73,13 +74,14 @@ impl MethodPathRouter {
     }
 }
 
-impl GrpcInbound for MethodPathRouter {
+impl GrpcIngress for MethodPathRouter {
     fn handle_unary(
         &self,
         request: GrpcRequest,
-    ) -> BoxFuture<'_, GrpcInboundResult<GrpcResponse>> {
+        ctx: RequestContext,
+    ) -> BoxFuture<'_, GrpcIngressResult<GrpcResponse>> {
         let inbound = Arc::clone(self.pick(&request.method));
-        Box::pin(async move { inbound.handle_unary(request).await })
+        Box::pin(async move { inbound.handle_unary(request, ctx).await })
     }
 
     fn handle_stream(
@@ -87,12 +89,13 @@ impl GrpcInbound for MethodPathRouter {
         method:   String,
         metadata: GrpcMetadata,
         messages: GrpcMessageStream,
-    ) -> BoxFuture<'_, GrpcInboundResult<(GrpcMessageStream, GrpcMetadata)>> {
+        ctx: RequestContext,
+    ) -> BoxFuture<'_, GrpcIngressResult<(GrpcMessageStream, GrpcMetadata)>> {
         let inbound = Arc::clone(self.pick(&method));
-        Box::pin(async move { inbound.handle_stream(method, metadata, messages).await })
+        Box::pin(async move { inbound.handle_stream(method, metadata, messages, ctx).await })
     }
 
-    fn health_check(&self) -> BoxFuture<'_, GrpcInboundResult<GrpcHealthCheck>> {
+    fn health_check(&self) -> BoxFuture<'_, GrpcIngressResult<GrpcHealthCheck>> {
         // Aggregate is "healthy iff the user dispatcher is healthy" —
         // the `HealthService` itself is always healthy by contract and
         // would mask a sick user dispatcher if we AND-ed both.
@@ -108,7 +111,7 @@ mod tests {
 
     use super::*;
 
-    /// `GrpcInbound` stub that records whether it was hit and returns a
+    /// `GrpcIngress` stub that records whether it was hit and returns a
     /// caller-supplied status string in the response body so the test
     /// can assert which inbound served a given request.
     struct LabelInbound {
@@ -117,11 +120,12 @@ mod tests {
         healthy: bool,
     }
 
-    impl GrpcInbound for LabelInbound {
+    impl GrpcIngress for LabelInbound {
         fn handle_unary(
             &self,
             _request: GrpcRequest,
-        ) -> BoxFuture<'_, GrpcInboundResult<GrpcResponse>> {
+            _ctx: RequestContext,
+        ) -> BoxFuture<'_, GrpcIngressResult<GrpcResponse>> {
             self.hit.store(true, Ordering::SeqCst);
             let label = self.label;
             Box::pin(async move {
@@ -134,7 +138,7 @@ mod tests {
 
         fn health_check(
             &self,
-        ) -> BoxFuture<'_, GrpcInboundResult<GrpcHealthCheck>> {
+        ) -> BoxFuture<'_, GrpcIngressResult<GrpcHealthCheck>> {
             let healthy = self.healthy;
             Box::pin(async move {
                 Ok(if healthy {
