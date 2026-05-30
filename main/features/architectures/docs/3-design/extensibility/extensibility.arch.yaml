@@ -1,5 +1,0 @@
-kind: architecture
-domain: Extensibility
-section: '3.5'
-specRef: docs/1-requirements/extensibility/extensibility.spec.yaml
-components: []

@@ -1,13 +1,10 @@
 [workspace]
 resolver = "2"
 members = [
-    # Foundations — consumed by llmserve workspace and any future workspaces.
-    # swe-ml-tensor extracted to https://github.com/sweengineeringlabs/llmtensor
-    "main/features/normalization",
-    "main/features/activation",
-    # swe-cli extracted to https://github.com/sweengineeringlabs/swecli
-    "main/features/architectures",
-    "main/features/training",
+    # Foundation ML crates extracted to dedicated repos:
+    #   swe-ml-tensor                          → sweengineeringlabs/llmtensor
+    #   swe-cli                                → sweengineeringlabs/swecli
+    #   normalization/activation/training/...  → sweengineeringlabs/llmeco
     # Developer tools — build-time utilities, not runtime.
     # Note: devtools/quantize depends on llmserve crates (quantizer, gguf, model)
     # via cross-workspace path deps. This is the single backward arrow we
@@ -63,15 +60,14 @@ tokenizers = "0.21"
 swe-readline = { path = "../swebash/swe-readline" }
 llama-cpp-2 = "0.1.143"
 
-# Foundation crates (in this workspace)
+# Foundation crates — all extracted to dedicated repos.
 swe-ml-tensor        = { git = "https://github.com/sweengineeringlabs/llmtensor", rev = "3f2fb98" }
-swe-ml-normalization = { path = "main/features/normalization" }
-swe-ml-activation    = { path = "main/features/activation" }
-# swe-ml-embedding extracted to https://github.com/sweengineeringlabs/justembed
+swe-ml-normalization = { git = "https://github.com/sweengineeringlabs/llmeco", rev = "973974d" }
+swe-ml-activation    = { git = "https://github.com/sweengineeringlabs/llmeco", rev = "973974d" }
+swe-ml-architectures = { git = "https://github.com/sweengineeringlabs/llmeco", rev = "973974d" }
+swe-ml-training      = { git = "https://github.com/sweengineeringlabs/llmeco", rev = "973974d" }
 swe-ml-embedding     = { git = "https://github.com/sweengineeringlabs/justembed", rev = "469b0a5" }
 swe-cli              = { git = "https://github.com/sweengineeringlabs/swecli", rev = "3204090" }
-swe-ml-architectures = { path = "main/features/architectures" }
-swe-ml-training      = { path = "main/features/training" }
 
 # Cross-workspace deps to llmmodel — used by devtools/quantize.
 swe-llmmodel-download = { path = "llmodel/llmmodel/download" }
